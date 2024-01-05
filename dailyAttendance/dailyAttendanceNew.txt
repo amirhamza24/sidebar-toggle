@@ -1,0 +1,774 @@
+import React,{useState,useEffect,useRef} from 'react'
+import moment from 'moment';
+import { CSVLink } from "react-csv";
+import Datepicker from "react-tailwindcss-datepicker";
+import { gray500,gray100,red500,gray300,gray400,green100,green600,gray700,gray800,gray200,gray600 } from '../../utils/colors';
+import  getDailyRoutine  from '../../services/DailyRoutineService';
+import getDownloadDailyRoutine from '../../services/DownloadDailyRoutineService';
+import getSearchedDailyRoutine from '../../services/DailyRoutineSearchService';
+
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import Loading from '../loader/Loading';
+import AttendanceImageService from '../../services/AttendanceImageService';
+
+import { styled } from '@mui/material/styles';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell, { tableCellClasses } from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
+import "rsuite/dist/rsuite.min.css";
+import { DatePicker } from "rsuite";
+import { baseUrl } from '../../utils/path';
+import EditDailyAttendanceService from './service/EditDailyAttendanceService';
+
+
+const url=`${baseUrl}daily_attendance_web`;
+const urlAllDaily=`${baseUrl}daily_attendance_all_web`;
+const searchUrl=`${baseUrl}daily_attendance_search_web`;
+const attImageurl=`${baseUrl}attendance_picture`;
+
+
+
+export default function DailyAttendance() {
+  // let page=0;
+  let limit=10;
+  // let maxLimit = 100000;
+  // const [flag, setFlag] = useState(false);
+  let [pageCount, setPage]=useState(1);
+  let [page, setPg]=useState(0);
+  const [isLoading, setIsLoading]=useState(true);
+  const [data, setData]=useState([]);
+  const [processedData, setProcessedData] = useState([]);
+  const [searchKey, setSearchKey]=useState('');
+  const [searchKey2, setSearchKey2]=useState('');
+  const [userId, setUserId]=useState('');
+  const [openClose, setOpenCLose]=useState(false);
+  const [openClose2, setOpenCLose2]=useState(false);
+  const [picUrl, setPicUrl]=useState(null);
+  const [isImageLoading, setIsImageLoading]=useState(true);
+  const [dateValue, setDateValue] = React.useState(null);
+  const [startDate, setStartDate]=useState('');
+  const [endDate, setEndDate]=useState('');
+  const [openCloseModal, setOpenCloseModal]=useState(false);
+  const [value, setValue] = useState({
+    startDate: null,
+    endDate: null
+  });
+  const inputRef = useRef(null);
+  const inputRef2 = useRef(null);
+  let id = null,userName=null;
+  const fromDate = moment(Date()).format('YYYY-MM-DD');
+  const toDate = moment(Date()).format('YYYY-MM-DD');
+  let fileName = moment(Date()).format('DD/MM/YYYY');
+  const [today, setToday]=useState('');
+  const [isEmpty, setIsEmpty]=useState(false);
+  const [dataLen, setDataLen]=useState(0);
+  const [editDate, setEditDate]=useState('');
+  const [editUserId, setEditUserId]=useState('');
+  const [editName, setEditName]=useState('');
+  const inTimeRef = useRef(null);
+  const outTimeRef = useRef(null);
+  const [editInTime, setEditInTime]=useState('');
+  const [editOutTime, setEditOutTime]=useState('');
+  const [attendanceId, setAttendanceId]=useState();
+  const [attendanceOutId, setAttendanceOutId]=useState();
+  const [totalPage, setTotalPage]=useState(null);
+  let [pageCountSearch,setPageSearch]=useState(1);
+  let [pageSearch,setPgSearch]=useState(0);
+
+  const convertTimeToISO = (time) => {
+    const currentDate = new Date();
+    const [hours, minutes] = time.split(':').map(Number);
+        
+    currentDate.setUTCHours(hours);
+    currentDate.setUTCMinutes(minutes);
+    currentDate.setUTCSeconds(0);
+        
+    const isoString = currentDate.toISOString();
+    return isoString.slice(0, 17) + '00Z';
+  };
+
+  // divided page number to allPage
+  const dividePage = (number) => {
+    console.log(number);
+    if (typeof number !== 'number') {
+      throw new Error('Input must be a number');
+    }
+            
+    const re= Math.ceil(number / 10);
+      setTotalPage(re);
+    };
+        
+    const showToastError = (message) => {
+      toast.error(message, { autoClose: 1000, position: toast.POSITION.TOP_RIGHT }); // autoClose is in milliseconds
+    };
+    const showToastSuccess = (message) => {
+      toast.success(message, { autoClose: 1000, position: toast.POSITION.TOP_RIGHT }); // autoClose is in milliseconds
+    };
+
+    const [editError,setEditError]=useState({});
+    const [editType,setEditType]=useState('');
+
+    const validateEdit=()=>{
+      const editError={};
+      //  if(editType===''){
+      //   editError.editType="Please Select Type";
+      //  }
+       if(editInTime==='' && editType==='in'){
+        editError.editInTime="Please Enter In Time";
+       }
+      //  if(editOutTime==='' && editType==='out'){
+      //   editError.editOutTime="Please Enter Out Time";
+      //  }
+       setEditError(editError);
+    return Object.keys(editError).length === 0;
+      }
+
+     
+
+        const updateDailyAttendance=async()=>{
+          // const isoTime = convertTimeToISO(editInTime);
+          // console.log(isoTime);
+          if(validateEdit()){
+            let time;
+            time=`${moment(editDate).format('YYYY-MM-DD')} ${editInTime}:00`; 
+          // if(editType==='in'){
+          //   time=`${moment(editDate).format('YYYY-MM-DD')} ${editInTime}:00`; 
+          // }
+          // else{
+          //   time=`${moment(editDate).format('YYYY-MM-DD')} ${editOutTime}:00`;
+          // }
+          const re=await EditDailyAttendanceService(attendanceId,time);
+          // const re=await EditDailyAttendanceService(editType==='in'?attendanceId:attendanceOutId,time);
+          setOpenCloseModal(false);
+          showToastSuccess("Attendance Edited Successfully");
+          if(searchKey===''){
+            getDailyRtn(startDate,startDate);
+          }
+          else{
+            search();
+          }
+         
+          setAttendanceId('');
+          setEditDate('');
+          setEditUserId('');
+          setEditName('');
+          setEditInTime('');
+          setEditOutTime('');
+          if(inTimeRef.current){
+            inTimeRef.current.value = '';
+          }
+          else{
+            outTimeRef.current.value = '';
+          }
+          }
+          else{
+            console.log('validation failed');
+          }
+          
+          
+          
+        }
+
+        
+        
+
+        const onEdit = (attId, attdOutId, date, id, uname, inTime, outTime) => {
+          setAttendanceId(attId);
+          setAttendanceOutId(attdOutId);
+          setEditDate(date);
+          setEditUserId(id);
+          setEditName(uname);
+        
+          if (inTimeRef.current) {
+            inTimeRef.current.value = inTime;
+          }
+          
+          if (outTimeRef.current && outTime !== null && outTime !== undefined) {
+            outTimeRef.current.value = outTime;
+          }
+        
+          setEditInTime(inTime);
+          setEditOutTime(outTime);
+        };
+        
+        
+      
+        // const url="http://118.179.60.93:8085/ords/wepl/hrlm/daily_attendance_web";
+            useEffect(()=>{
+              setToday(fromDate);
+                setStartDate(fromDate);
+                // setEndDate(toDate);
+                const id=localStorage.getItem('userId');
+                setUserId(id);
+                
+                getDailyRtn(fromDate,fromDate);
+                // const getDownloadRtn=async()=>{
+                //     const re =await getDownloadDailyRoutine(urlAllDaily);
+                //     const dd=re.ATTENDANCE_DETAILS;
+                //     console.log(`all: ${dd}`);
+                 
+                    
+                // }
+                
+                // getDownloadRtn();
+               
+            },[ ]);
+
+            const handleValueChange = (newValue) => {
+              console.log("start:", moment(newValue.startDate).format("YYYY-MM-DD"));
+              console.log("end:", moment(newValue.endDate).format("YYYY-MM-DD"));
+              setValue(newValue);
+          }
+
+            const getDailyRtn=async(f,t)=>{
+              const result= await getDailyRoutine(url,page,limit,f,t);
+              if(result.ATTENDANCE_DETAILS.length===0){
+                setIsEmpty(true);
+                setDataLen(0);
+              }
+              else{
+                setIsEmpty(false);
+                setDataLen(result.ATTENDANCE_DETAILS.length);
+              }
+              setData(result.ATTENDANCE_DETAILS);
+              dividePage(result.Total_Count)
+            
+                processData(result.ATTENDANCE_DETAILS);
+                setIsLoading(false);
+              
+             
+              // setDataInCSV(result.ATTENDANCE_DETAILS);
+              
+              // console.log(result.ATTENDANCE_DETAILS);
+            
+              // console.log(data);
+             
+          };
+
+            const handleDateChange = (date) => {
+    
+            const  formatted=moment(date).format("YYYY-MM-DD");
+            // setData([]);
+            setIsLoading(true);
+             setStartDate(formatted);
+            setDateValue(date);
+            getDailyRtn(formatted,formatted);
+            
+           };
+     
+           const handleCleanDate=()=>{
+             setDateValue(null);
+            //  setStartDate(null);
+            //  setData([]);
+            //  setStartDate(fromDate);
+            //  console.log(`birth: ${dateValue}`);
+            //  setData([]);
+             setIsLoading(true);
+             getDailyRtn(today,today);
+           }
+
+            const showImage=async(attId)=>{
+
+                const im=await AttendanceImageService(attImageurl,userId,attId);
+                base64ToImageUrl(im.PICTURE);
+            }
+
+            const base64ToImageUrl = (base64String) => {
+                const blob = base64ToBlob(base64String);
+                const url = URL.createObjectURL(blob);
+                setPicUrl(url);
+                setIsImageLoading(false);
+              };
+              
+              const base64ToBlob = (base64String) => {
+                const byteCharacters = atob(base64String);
+                const byteArrays = [];
+              
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteArrays.push(byteCharacters.charCodeAt(i));
+                }
+              
+                const blob = new Blob([new Uint8Array(byteArrays)], { type: 'image/png' });
+                return blob;
+              };
+
+            const search=async()=>{
+                // event.preventDefault();
+              
+                setIsLoading(true);
+                // setData([]);
+                id=searchKey;
+                if(!isNaN(searchKey)){
+                    id=searchKey;
+                }
+                else{
+                    userName=searchKey;
+                }
+
+                console.log(`id: ${id} userName: ${userName}`);
+
+                const result=await getSearchedDailyRoutine(searchUrl,id,userName,startDate===''?fromDate:startDate,startDate===''?fromDate:startDate, page, limit);
+              console.log(`ssss: ${result.ATTENDANCE_DETAILS}`);
+              
+              dividePage(result.Total_Count);
+                setData(result.ATTENDANCE_DETAILS);
+                processData(result.ATTENDANCE_DETAILS);
+                setIsLoading(false);
+                // console.log(`len: ${data.length}`);
+                
+
+                setSearchKey("");
+                inputRef.current.value = "";
+            }
+
+
+
+           
+            const processData = (data) => {
+              if (data && data.length > 0) {
+                const newData = data.map((obj) => {
+                  const newDate = new Date(obj.ATTENDANCE_DATE);
+                  const formattedDate =moment(newDate).format('DD/MM/YYYY');
+                  const late=calculateTimeDifference(obj.LOG_IN,obj.OFFICE_BUFFER_TIME);
+                  // newDate.toLocaleString("en-US", {
+                  //     day: "2-digit",
+                  //     month: "2-digit",
+                  //     year: "numeric",
+                  //     // hour: "numeric",
+                  //     // minute: "numeric",
+                  //     // hour12: true,
+                  //   });
+                  // const formattedDate = `${newDate.getDate()}/${newDate.getMonth() + 1}/${newDate.getFullYear()} ${newData.getTime()}`;
+                  return { ...obj, ATTENDANCE_DATE: formattedDate, LATE:late };
+                });
+                setProcessedData(newData);
+                console.log(newData);
+              } else {
+                console.log('Data is empty or undefined');
+              }
+            }
+           
+           
+            const next=async()=>{
+             
+               
+                // setPage((page)=>page+10);
+                const newPage = page + 10;
+                setPg(newPage);
+                console.log(`page here ${newPage}`);
+                setPage((pre)=>pre+1);
+              
+              
+                setIsLoading(true);
+                // setData([]);
+              
+                const result= await getDailyRoutine(url,newPage,limit,startDate,startDate);
+                dividePage(result.Total_Count);
+                setData(result.ATTENDANCE_DETAILS);
+                console.log(result.ATTENDANCE_DETAILS);
+                setIsLoading(false);
+              
+                
+                console.log('clicked');
+                
+                
+              
+                
+            }
+          
+           
+            const previous=async()=>{
+             
+                // setPage((pre)=>pre-10);
+                const newPage = page - 10;
+                setPg(newPage);
+                console.log(`page here ${newPage}`);
+                setPage((pre)=>pre-1);
+               
+                console.log('clicked');
+                setIsLoading(true);
+                // setData([]);
+                
+                const result= await getDailyRoutine(url,newPage,limit,startDate,startDate);
+                
+                dividePage(result.Total_Count);
+                setData(result.ATTENDANCE_DETAILS);
+                setIsLoading(false);
+                console.log(result.ATTENDANCE_DETAILS);
+            }
+
+            
+
+
+            const calculateTimeDifference = (loginTime, officeStartTime) => {
+              // Create Date objects for login time and office start time
+              const loginDate = new Date(`1970-01-01 ${loginTime}`);
+              const officeStartDate = new Date(`1970-01-01 ${officeStartTime}`);
+            
+              // Calculate the time difference in milliseconds
+              const timeDiff = loginDate.getTime() - officeStartDate.getTime();
+            
+              // Check if login time is greater than office start time
+              if (timeDiff > 0) {
+                // Convert the time difference to minutes or hours
+                let result = '';
+                const minutesDiff = Math.floor(timeDiff / 1000 / 60);
+                if (minutesDiff >= 60) {
+                  const hoursDiff = Math.floor(minutesDiff / 60);
+                  const remainingMinutesDiff = minutesDiff % 60;
+                  result = `${hoursDiff} h : ${remainingMinutesDiff} m`;
+                } else {
+                  result = `${minutesDiff}m`;
+                }
+                return result;
+              } else {
+                return "N/A";
+              }
+            };
+            
+            
+            
+            
+         
+            
+          
+    
+           
+  return (
+    
+    <div className=' mt-16 bg-white '>
+         <ToastContainer />
+        <div className='  w-full   bg-white rounded-lg shadow-lg lg:pl-8 lg:pr-8 md:ml-4 md:pr-8 pl-4 pr-4  flex flex-col items-start'>
+            <div className=' flex  flex-row justify-between items-center p-5 w-full h-16  bg-white'>
+                <h4 className=' text-black font-semibold lg:text-lg md:text-sm text-xs '>Daily Attendance</h4>
+                <div className=' flex flex-row space-x-2'>
+                
+                {/* <button onClick={()=>{setOpenCLose2(true)}} className={` w-auto h-9 flex justify-center items-center bg-${green600} px-2 rounded-md shadow-sm`}>
+                             <h2 className=' lg:text-sm md:text-xs text-[8px] text-white  font-bold'>Download By Employee</h2>
+     
+                         </button> */}
+      
+        
+                
+                         <DatePicker
+                         className=' lg:w-48 md:w-36 h-8'
+            appearance="default"
+            size="md"
+            format="dd-MM-yyyy"
+            placeholder="Select Date"
+            onChange={handleDateChange}
+            value={dateValue}
+            onClean={handleCleanDate}
+            ranges={[
+              {
+                label: "Now",
+                value: new Date(),
+              },
+            ]}
+            // style={{ width: 335, height: 50 }}
+          />
+                  {/* {
+                    processedData &&(
+                        <CSVLink data={processedData} headers={headers} filename={`attendance_${fileName}.csv`}>
+                        <button className={` w-auto h-9 flex justify-center items-center bg-${green600} px-2 rounded-md shadow-sm`}>
+                             <h2 className=' lg:text-sm md:text-xs text-xs text-white  font-bold'>Download</h2>
+     
+                         </button>
+                        </CSVLink>
+                    )
+                  }
+                    */}
+                    <input ref={inputRef} value={searchKey} type="text" onChange={(e)=>{setSearchKey(e.target.value)}} placeholder='id or name'  className='  border  border-gray-300 h-9 lg:w-40 md:w-24 w-24 rounded-lg active:border active:border-blue-300 px-3 focus:outline-none' />
+ <button onClick={()=>{search(fromDate,fromDate)}} type='submit'>
+ <div className={`h-9 w-10 rounded-md shadow-sm justify-center  bg-buttonColor px-2`}>
+ <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-6 h-9 text-white font-semibold`}>
+  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+</svg>
+ </div>
+ </button>
+
+                </div>
+            </div>
+
+            {/* end search and title */}
+
+            {
+              isLoading?
+                  
+                  
+                    
+              <Loading/>
+            
+            : 
+
+
+            
+            isEmpty?  
+      <div className=' flex flex-row justify-center items-center text-center w-full h-screen '>
+          
+          <h1 className={`text-${red500} font-bold text-2xl `}>No Data Found</h1>
+
+      </div>:
+              
+              <div className="overflow-x-auto  mt-6   md:w-full w-96 ">
+        <div className="inline-block min-w-full md:px-0 px-0">
+            <div className=" shadow overflow-hidden">
+                <table className="">
+                    <thead className=" bg-gray-200 shadow-sm h-14">
+                        <tr>
+                        <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">EDIT</th>
+                            
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">DATE</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">ID</th>
+                            {/* Add the rest of the columns */}
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">NAME</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">IN</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">OUT</th>
+                            {/* <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">LATE</th> */}
+                            {/* Add the rest of the columns */}
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">IN SITE</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">REMARKS(IN)</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">REMARKS(OUT)</th>
+                            <th className="px-6 py-3 text-left text-sm   text-gray-500 uppercase tracking-wider">PHOTO</th>
+                            
+                            
+                        </tr>
+                    </thead>
+                    <tbody className=" divide-y divide-borderColor">
+                   { 
+                  
+                  data.map((e,index)=>{
+                  
+                    return(
+                        <tr key={index}  className='bg-white'>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                    <button 
+                  
+                    onClick={()=>{onEdit(e.ATDN_ROW_ID,e.LOG_OUT_ROW_ID,e.ATTENDANCE_DATE,e.EMPLOYEE_ID,e.EMPLOYEE_NAME,e.LOG_IN,e.LOG_OUT);setOpenCloseModal(true)}}
+                    >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+<path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+</svg>
+                    </button>
+
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{
+     e.ATTENDANCE_DATE==null?"N/A":  moment(e.ATTENDANCE_DATE).format('DD/MM/YYYY')
+  }</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.EMPLOYEE_ID == null? "N?A": e.EMPLOYEE_ID}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.EMPLOYEE_NAME ==null ?"N/A":e.EMPLOYEE_NAME}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.LOG_IN ==null ?"N/A":e.LOG_IN}</td>
+                                    {/* Render the rest of the columns */}
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.LOG_OUT == null? "N/A":e.LOG_OUT}</td>
+                                    {/* <td className="px-6 py-4 whitespace-nowrap">{calculateTimeDifference(e.LOG_IN,e.OFFICE_BUFFER_TIME)}</td> */}
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.PLANT_NAME == null? "N/A":e.PLANT_NAME}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.LOG_IN_REMARKS == null ? "N/A": e.LOG_IN_REMARKS}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{e.LOG_OUT_REMARKS ==null ?"N/A" : e.LOG_OUT_REMARKS}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <button onClick={()=>{setOpenCLose(true); showImage(e.ATDN_ROW_ID)}} className=' w-auto p-1 bg-green-500 shadow-md rounded-md'>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white">
+  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+</svg>
+
+
+                </button>
+                                    </td>
+                                    {/* Render the rest of the columns */}
+                                  
+                                   
+                                </tr>
+                    )
+                  })
+                                
+                                }
+                           
+
+                    </tbody>
+                  
+                </table>
+            </div>
+        </div>
+    </div>
+
+}
+           
+            
+
+            {/* end content */}
+
+            <div  className=' flex flex-row space-x-4 justify-end items-end my-6 w-full pr-6'>
+      <button  disabled={ page===0?true:false} onClick={previous}>
+      <svg  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5  ${page ===0?'text-white':`text-${gray600}`} font-bold`}>
+  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+</svg>
+      </button>
+ <p className={`text-${gray500} text-sm font-bold`}>
+Page {pageCount} of {totalPage}
+    </p> 
+
+
+            <button disabled={(page===0 && isEmpty) || dataLen<10 || pageCount === totalPage ? true:false} onClick={next}>
+            <svg   xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5  ${isEmpty || dataLen<10 || pageCount === totalPage ?'text-white':`text-${gray600}`} font-bold`}>
+  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+</svg>
+            </button>
+
+
+            </div>
+
+{/* <div className='flex flex-row space-x-4 justify-center items-end mt-4 mb-3 lg:w-full md:w-3/4 sm:w-96 pr-6'>
+            <button disabled={page === 0 && pageSearch === 0 ? true : false} onClick={() => { isSearch ? searchPrevious() : previous() }}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-6 h-6 font-bold ${page === 0 && pageSearch === 0 ? 'text-white' : `text-${gray600}`} font-bold`}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+
+            <p className={`text-${gray500} text-[18px] font-bold`}>
+              Page {isSearch ? pageCountSearch : pageCount} Of {totalPage}
+            </p>
+
+            <button disabled={(isSearch ? pageCountSearch : pageCount) === totalPage || data.length === 0} onClick={() => { isSearch ? searchNext() : next() }}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-6 h-6 font-bold ${((isSearch ? pageCountSearch : pageCount) === totalPage || data.length === 0) ? 'text-white' : `text-${gray600}`} font-bold`}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div> */}
+
+            {/* <div>
+                {
+                    pageCount
+                }
+                
+                <button onClick={()=>{setPage((pre)=>pre+10)}}>
+                    clck
+                </button>
+            </div> */}
+             
+
+           
+        </div>
+        <input type="checkbox" id="my-modal-11" className="modal-toggle" checked={openClose} />
+<div className="modal ">
+  <div className="modal-box bg-white">
+  <label htmlFor="my-modal-11" onClick={(e)=>{setOpenCLose(false); setPicUrl('')}} className="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+   
+    {
+        isImageLoading?
+        <p>Loading........</p>
+        :
+        <img src={picUrl} alt="attpic" className=' h-80 w-full p-4 shadow-md rounded-md'  />
+        }
+  
+    
+  </div>
+</div>
+        <input type="checkbox" id="my-modal-12" className="modal-toggle" checked={openClose2} />
+<div className="modal">
+  <div className="modal-box w-3/4 max-w-7xl  h-5/6">
+  <label htmlFor="my-modal-11" onClick={(e)=>{setOpenCLose2(false);}} className="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+   
+        <div className='  flex flex-col items-start space-y-8'>
+       <div className=' flex flex-row space-x-6 h-12'>
+       <Datepicker
+
+placeholder='From Date - To Date         '
+showFooter={true}
+primaryColor={"green"}
+showShortcuts={true}
+value={value}
+onChange={handleValueChange}
+displayFormat={"DD/MM/YYYY"}
+toggleClassName={`absolute bg-${green600}  rounded-r-lg text-white right-0 h-full px-3 text-${gray400} focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed`}
+// inputClassName="w-full rounded-md focus:ring-0 font-normal bg-green-100 dark:bg-green-900 dark:placeholder:text-green-100" 
+// containerClassName=" border border-[1px] border-gray-400 w-80 rounded-md" 
+// toggleClassName=" text-gray-400"
+inputClassName={`outline-green-600  border-2 border-green-600 w-[250px] rounded-r-lg h-full px-3`}
+// containerClassName="  " 
+
+
+/>
+<input ref={inputRef} value={searchKey} type="text" onChange={(e)=>{setSearchKey(e.target.value)}} placeholder='Enter Employee Id'  className='  border  border-gray-300 h-12 w-52 rounded-lg active:border active:border-blue-300 px-3 focus:outline-none' />
+       </div>
+
+       <button 
+       onClick={()=>{setOpenCLose2(false); search()}}
+       className='  w-1/2 h-12 rounded-md justify-center items-center text-white shadow-sm bg-green-600 font-semibold  '>
+        SEARCH
+
+       </button>
+
+        </div>
+  
+    
+  </div>
+</div>
+
+<input type="checkbox" id="my-modal-11" className="modal-toggle" checked={openCloseModal} />
+<div className="modal">
+  <div className="modal-box">
+  <label htmlFor="my-modal-11" onClick={(e)=>{setOpenCloseModal(false); }} className="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+   
+    
+       <div className=' w-full h-64 flex  bg-white flex-col items-start space-y-2'>
+        <div className='h-4'></div>
+        <p className=' text-[16px] text-black font-medium'>Date: {moment(editDate).format('DD/MM/YYYY')}</p>
+        <p className=' text-[16px] text-black font-medium'>Employee Id: {editUserId}</p>
+        <p className=' text-[16px] text-black font-medium'>Employee Name: {editName}</p>
+        {/* <p>Select Time To Edit *</p>
+        <select 
+        placeholder='Select'
+        value={editType}
+        onChange={(e)=>{setEditType(e.target.value)}}
+        className="select select-bordered w-52">
+       
+  <option value="" disabled selected>Select</option>
+  <option value="in">In Time</option>
+  <option value="out">Out Time</option>
+</select> */}
+{editError.editType && <span className={`text-red-500`}>{editError.editType}</span>}
+       
+          <div className=' flex flex-col items-start'>
+          <p>In Time *</p>
+        <input ref={inTimeRef}  type="text" onChange={(e)=>{setEditInTime(e.target.value)}} placeholder='Edit In Time'  className='  border  border-gray-300 h-9 lg:w-52 md:w-52 w-24 rounded-lg active:border active:border-blue-300 px-3 focus:outline-none' />
+        {editError.editInTime && <span className={`text-red-500`}>{editError.editInTime}</span>}
+        </div>
+     
+        
+        {/* <div className='flex flex-col items-start'>
+  <p>Out Time *</p>
+  <input
+    ref={outTimeRef}
+    type="text"
+    onChange={(e) => { setEditOutTime(e.target.value) }}
+    placeholder='Edit Out Time'
+    className='border border-gray-300 h-9 lg:w-52 md:w-52 w-24 rounded-lg active:border active:border-blue-300 px-3 focus:outline-none'
+  />
+  {editError.editOutTime && <span className={`text-red-500`}>{editError.editOutTime}</span>}
+</div> */}
+
+        
+      
+        <div className='h-2'></div>
+        <button onClick={updateDailyAttendance} className=' text-white bg-green-500 py-1 px-4 rounded-md'>SUBMIT</button>
+       
+       </div>
+
+    
+  
+    
+  </div>
+</div>
+
+
+    </div>
+
+    
+
+    
+  )
+}
