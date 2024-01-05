@@ -1,0 +1,36 @@
+
+
+  const getSearchedDailyRoutine= async(url, id, userName, f, t, offset, limit)=>{
+    console.log(f);
+    console.log("all: ", id, userName, f, t, offset, limit);
+    
+    const response = await   fetch(url,
+        {
+            method: "POST",
+            headers: {
+              
+              "Content-Type": "application/json",
+              'Authorization': 'Basic ' + btoa(`${process.env.REACT_APP_U}:${process.env.REACT_APP_P}`),
+            },
+            body: JSON.stringify({
+                "EMPLOYEE_ID": id,
+                "Z_NAME": userName,
+                "FROM_DATE": f,
+                "TO_DATE": t,
+                "P_OFFSET": offset,
+                "P_LIMIT": limit
+
+            }),
+          }
+        );
+        // if (!response.ok) {
+        //     throw new Error("fetching is not successful");
+        //   }
+          const data = await response.json();
+          console.log(`src: ${data}`);
+          console.log(`src c: ${response.status}`);
+          return data;
+
+     
+}
+export default getSearchedDailyRoutine
