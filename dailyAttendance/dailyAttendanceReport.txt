@@ -1,0 +1,828 @@
+import { DatePicker } from "rsuite";
+import Datepicker from "react-tailwindcss-datepicker";
+import { useEffect } from "react";
+import { useState } from "react";
+import Loading from "../../components/loader/Loading";
+import moment from "moment";
+import getCompanyList from "../../services/CompanyListService";
+import getPlantList from "../../services/PlantListService";
+
+import { CSVLink } from "react-csv";
+import DailyAttendanceService from "./service/DailyAttendanceService";
+import { baseUrl } from "../../utils/path";
+import GetDailyAttendanceTotal from "./service/GetDailyAttendanceTotal";
+
+const companyUrl = `${baseUrl}getCompanyList`;
+const moduleUrl = `${baseUrl}approval_module_types`;
+const plantUrl = `${baseUrl}get_plant_details`;
+
+
+export default function DailyAttendance() {
+
+  const [sateStatusCnt, setStageStatusCnt] = useState('');
+  const [userStatusCnt, setUserStatusCnt] = useState('A');
+  const [uId, setUid] = useState('');
+  const [page, setPage] = useState(0);
+  let limit = 10;
+  let totalLimit = 100000;
+  const [data, setData] = useState([]);
+  const [totalPage, setTotalPage] = useState(null);
+  const [pageCount, setPageCount] = useState(1)
+  const [empId, setEmpId] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSearch, setIsSearch]=useState(false);
+  let [pageCountSearch, setPageCountSearch]=useState(1);
+  let [pageSearch, setPageSearch]=useState(0);
+  const [startEndDate, setStartEndDate] = useState({ startDate: null, endDate: null, });
+  const [fromDate, setFromDate] = useState(null);
+  const [toDate, setToDate] = useState(null);
+  const [companyCode, setCompanyCode] = useState('');
+  const [plantCode, setPlantCode] = useState('');
+  const [selectedCompanyname, setSelectedCompanyName] = useState('');
+  const [selectedPlantname, setSelectedPlantName] = useState('');
+  const [isCompanyLoading, setIsCompanyLoading] = useState(true);
+  const [company, setCompany] = useState([]);
+  const [companyList, setCompanyList] = useState([]);
+  const [isPlantVisible, setIsPlantVisible] = useState(false);
+  const [plant, setPlant] = useState([]);
+  const [isPlantLoading, setIsPlantLoading] = useState(true);
+  const [searchById, setSearchById]=useState('');
+  const [processedData, setProcessedData] = useState([]);
+  const [allProcessedData, setAllProcessedData] = useState([]);
+  const [totalReport, setTotalReport] = useState([]);
+
+  useEffect(() => {
+    const id = localStorage.getItem('userId');
+    setUid(id);
+    getAll();
+    allDownloadData();
+    getTotalReport();
+    // getPlanMaster();
+    // stageStatusRef.current.value = "A";
+    // userStatusRef.current.value = "A";
+    setStageStatusCnt("A");
+    setUserStatusCnt("A");
+
+  }, []);
+
+  useEffect(() => {
+    const getCompanyName = async () => {
+      const result = await getCompanyList(companyUrl);
+      setCompanyList(result.items);
+      setIsCompanyLoading(false);
+    };
+    getCompanyName();
+  },[] );
+
+  const getTotalReport = async () => {
+    const re = await GetDailyAttendanceTotal();
+    console.log("total report: ", re.TOTAL_DETAILS);
+    setTotalReport(re.TOTAL_DETAILS);
+  }
+
+  // initially get all data
+  const getAll = async () => {
+    const result = await DailyAttendanceService("", "", "", "", "", page, limit);
+    
+    dividePage(result.Total_Count);
+    console.log("daily atn. rep.", result.ATTENDANCE_DETAILS);
+      
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+  };
+
+  const allDownloadData = async (stDate, eDate, compCode, plantCode, searchId) => {
+    setIsLoading(true);
+
+    console.log("stDate: ", stDate);
+    console.log("eDate: ", eDate);
+    console.log("compCode: ", compCode);
+    console.log("plantCode: ", plantCode);
+    console.log("searchId: ", searchId);
+
+    const result = await DailyAttendanceService(searchId ? searchId : "", compCode ? compCode : "", plantCode ? plantCode : "", stDate ? stDate : "", eDate ? eDate : "", page, totalLimit);
+    
+    allProcessData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+  };
+
+  // divided page number to allPage (for pagination)
+  const dividePage = (number) => {
+    console.log(number);
+    if (typeof number !== 'number') {
+      throw new Error('Input must be a number');
+    }
+      
+    const re= Math.ceil(number / 10);
+    setTotalPage(re);
+  };
+
+  // go to next page
+  const next = async () => {
+    // setPage((page)=>page+10);
+    const newPage = page + 10;
+    setPage(newPage);
+    console.log(`page here ${newPage}`);
+    setPageCount((pre)=>pre+1);
+  
+    setIsLoading(true);
+    setData([]);
+  
+    const result = await DailyAttendanceService(searchById, companyCode, plantCode, fromDate, toDate, newPage, limit)
+      
+    dividePage(result.Total_Count);
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+    
+    console.log('clicked');
+  }
+
+  // after Searching next page
+  const searchNext = async() => {
+    // setPage((page)=>page+10);
+    const newPage = pageSearch + 10;
+    setPageSearch(newPage);
+    console.log(`page here ${newPage}`);
+    setPageCountSearch((pre)=>pre+1);
+
+    setIsLoading(true);
+    setData([]);
+
+    const result = await DailyAttendanceService(searchById, companyCode, plantCode, fromDate, toDate, newPage, limit);
+
+    dividePage(result.Total_Count);
+      
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+  }
+
+  // back to previous page
+  const previous = async () => {
+      
+    // setPage((pre)=>pre-10);
+    const newPage = page - 10;
+    setPage(newPage);
+    console.log(`page here ${newPage}`);
+    setPageCount((pre)=>pre-1);
+  
+    console.log('previous button clicked');
+    setIsLoading(true);
+    setData([]);
+    
+    const result = await DailyAttendanceService(searchById, companyCode, plantCode, fromDate, toDate, newPage, limit);
+    
+    dividePage(result.Total_Count);
+
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+  }
+
+  // after Searching back previous
+  const searchPrevious = async () => {
+    const newPage = pageSearch - 10;
+    setPageSearch(newPage);
+    console.log(`page here ${newPage}`);
+    setPageCountSearch((pre)=>pre-1);
+  
+    console.log('clicked');
+    setIsLoading(true);
+    setData([]);
+    
+    const result = await DailyAttendanceService(searchById, companyCode, plantCode, fromDate, toDate, newPage, limit);
+
+    dividePage(result.Total_Count);
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    setIsLoading(false);
+  }
+
+  // convert date by day/month/year
+  const convertDate = (dateString) => {
+    const dateObject = new Date(dateString);
+    const day = String(dateObject.getUTCDate()).padStart(2, '0');
+    const month = String(dateObject.getUTCMonth() + 1).padStart(2, '0');
+    const year = dateObject.getUTCFullYear();
+
+    return `${day}/${month}/${year}`;
+  };
+
+  // using for see more and see less for description
+  const [seeMore, setSeeMore] = useState(-1);
+
+  const handleSeeMoreDetails = (index) => {
+    setSeeMore(index === seeMore ? -1 : index);
+  };
+
+  // date select
+  // const handleDateChange = async (newDate) => {
+  //   console.log("start:", moment(newDate.startDate).format("YYYY-MM-DD"));
+  //   console.log("end:", moment(newDate.endDate).format("YYYY-MM-DD"));
+  //   setStartEndDate(newDate);
+    
+  //   setFromDate(newDate.startDate);
+  //   setToDate(newDate.endDate);
+
+  //   console.log("select date new: ", fromDate);
+  //   setIsLoading(true);
+  //   setData([]);
+    
+  //   const result = await DailyAttendanceService("", "", "", newDate.startDate, newDate.endDate, page, limit);
+    
+  //   dividePage(result.Total_Count);
+  //   setData(result.ATTENDANCE_DETAILS);
+  //   processData(result.ATTENDANCE_DETAILS);
+  //   allDownloadData(newDate.startDate, newDate.endDate, "", "", "");
+  //   setIsLoading(false);
+  // }
+
+  
+const handleDateChange = async (newDate) => {
+  const startDateFormatted = moment(newDate.startDate).format("DD-MM-YYYY");
+  const endDateFormatted = moment(newDate.endDate).format("DD-MM-YYYY");
+
+  console.log("start:", startDateFormatted);
+  console.log("end:", endDateFormatted);
+
+  setStartEndDate(newDate);
+  setFromDate(startDateFormatted);
+  setToDate(endDateFormatted);
+
+  console.log("select date new: ", fromDate);
+  setIsLoading(true);
+  setData([]);
+
+  const result = await DailyAttendanceService("", "", "", startDateFormatted, endDateFormatted, page, limit);
+
+  dividePage(result.Total_Count);
+  setData(result.ATTENDANCE_DETAILS);
+  processData(result.ATTENDANCE_DETAILS);
+  allDownloadData(startDateFormatted, endDateFormatted, "", "", "");
+  setIsLoading(false);
+}
+
+  // company data
+  const handleCompany = async (e) => {
+    const selectedCode = e.target.value;
+    const selectedName = companyList.find(c => c.company_code === selectedCode)?.company_name || '';
+    
+    console.log("Selected company code: ", selectedCode)
+
+    setCompanyCode(selectedCode);
+    setSelectedCompanyName(selectedName);
+    getPlant(selectedCode);
+
+    setIsLoading(true);
+    setData([]);
+    
+    const result = await DailyAttendanceService("", selectedCode, "", fromDate, toDate, page, limit);
+
+    dividePage(result.Total_Count);
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    allDownloadData(fromDate, toDate, selectedCode, "", "");
+    setIsPlantVisible(true);
+    setIsLoading(false);
+  };
+
+  // plant data 
+  const handlePlant = async (e) => {
+    // handleDropDown(e);
+    // setPlantName(e.PLANT_NAME);
+
+    const selectedPlantCode = e.target.value;
+    setPlantCode(selectedPlantCode);
+
+    const selectedName = plant.find(c => c.PLANT_CODE === selectedPlantCode)?.PLANT_NAME || '';
+    setSelectedPlantName(selectedName);
+
+    setIsLoading(true);
+    setData([]);
+
+    const result = await DailyAttendanceService("", companyCode, selectedPlantCode, fromDate, toDate, page, limit);
+
+    dividePage(result.Total_Count);
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    allDownloadData(fromDate, toDate, companyCode, selectedPlantCode, "");
+    setIsLoading(false);
+  };
+
+  // plant list here
+  const getPlant = async (code) => {
+    const plant = await getPlantList(plantUrl, code);
+    console.log("plant:=", plant);
+    setPlant(plant.PLANT_DETAILS);
+
+    setIsPlantLoading(false);
+  }
+
+  // for searching by employee id
+  const searchEmpId = async () => {
+    setIsLoading(true);
+    setData([]);
+
+    const result = await DailyAttendanceService(searchById, companyCode, plantCode, fromDate, toDate, page, limit);
+
+    dividePage(result.Total_Count);
+    setData(result.ATTENDANCE_DETAILS);
+    processData(result.ATTENDANCE_DETAILS);
+    allDownloadData(fromDate, toDate, companyCode, plantCode, searchById);
+    setIsLoading(false);
+
+    // setSearchById('');
+  }
+
+  const processData = (data) => {
+    if (data && data.length > 0) {
+      const newData = data.map((obj) => {
+        const newDate = new Date(obj.REQUISITION_LOADING_DATE);
+        const formattedDate = moment(newDate).format("DD/MM/YYYY");
+
+        return { ...obj, REQUISITION_LOADING_DATE: formattedDate };
+      });
+      setProcessedData(newData);
+      console.log("processed Data: ", processedData)
+    } 
+    
+    else {
+      console.log("Data is empty or undefined");
+    }
+  };
+
+  const allProcessData = (data) => {
+    if (data && data.length > 0) {
+      const newData = data.map((obj) => {
+        const newDate = new Date(obj.REQUISITION_LOADING_DATE);
+        const formattedDate = moment(newDate).format("DD/MM/YYYY");
+
+        return { ...obj, REQUISITION_LOADING_DATE: formattedDate };
+      });
+      setAllProcessedData(newData);
+    } 
+    
+    else {
+      console.log("Data is empty or undefined");
+    }
+  };
+
+  const headers = [
+    { label: "EMPLOYEE ID", key: "EMPLOYEE_ID" },
+    { label: "EMPLOYEE NAME", key: "EMPLOYEE_NAME" },
+    { label: "POSITION", key: "POSITION_NAME" },
+    { label: "PLANT NAME", key: "PLANT_NAME" },
+    { label: "DEPARTMENT", key: "DEPARTMENT_NAME" },
+    { label: "CLOCK IN", key: "CLOCK_IN" },
+    { label: "CLOCK OUT", key: "CLOCK_OUT" },
+    { label: "LATE TIME", key: "LATE_TIME" },
+    { label: "LEAVE TYPE", key: "MOVE_ORDER_TYPE" },
+    { label: "MOVE ORDER", key: "MOVE_ORDER_TYPE" },
+    { label: "MOVE ORDER CLOCK IN", key: "MOVE_ORDER_CLOCK_IN" },
+    { label: "MOVE ORDER CLOCK OUT", key: "MOVE_ORDER_CLOCK_OUT" },
+    { label: "ATTENDANCE STATUS", key: "ATTENDANCE_STATUS" },
+    { label: "TOTAL WORKING TIME", key: "WORKING_TIME" },
+    { label: "PICTURE", key: "PICTURE" },
+    { label: "REMARKS", key: "REMARKS" },
+    { label: "OVER TIME", key: "OVER_TIME" },
+  ];
+
+  let fileName = moment(Date()).format("DD/MM/YYYY");
+
+  const calculateWorkingTime = (loginTime, officeStartTime) => {
+    // Create Date objects for login time and office start time
+    const loginDate = new Date(`1970-01-01 ${loginTime}`);
+    const officeStartDate = new Date(`1970-01-01 ${officeStartTime}`);
+  
+    // Calculate the time difference in milliseconds
+    const timeDiff = loginDate.getTime() - officeStartDate.getTime();
+  
+    // Check if login time is greater than office start time
+    if (timeDiff > 0) {
+      // Convert the time difference to minutes or hours
+      let result = '';
+      const minutesDiff = Math.floor(timeDiff / 1000 / 60);
+      if (minutesDiff >= 60) {
+        const hoursDiff = Math.floor(minutesDiff / 60);
+        const remainingMinutesDiff = minutesDiff % 60;
+        result = `${hoursDiff} h : ${remainingMinutesDiff} m`;
+      } else {
+        result = `${minutesDiff}m`;
+      }
+      return result;
+    } else {
+      return "N/A";
+    }
+  };
+
+
+  return (
+    <div className="mx-8 my-20 bg-white">
+      <div className='w-full bg-white'>
+        <h4 className=' text-black font-semibold lg:text-lg md:text-sm text-xs'>Daily Attendance Report</h4>
+
+        <div className="h-5"></div>
+
+        {
+          isLoading ? (
+            <Loading />
+          ) : (
+            <>
+              <div className="flex items-center space-x-3">
+                <div className="w-1/4">
+                  <Datepicker
+                    // useRange={moveTypeCode==='11'?true:false}
+                    // asSingle={moveTypeCode!=='11'?true:false}
+                    popoverDirection="down"
+                    placeholder="Date From-To         "
+                    showFooter={true}
+                    primaryColor={"green"}
+                    showShortcuts={true}
+                    value={startEndDate}
+                    onChange={handleDateChange}
+                    displayFormat={"DD/MM/YYYY"}
+                    toggleClassName={`absolute rounded-r-lg text-[#7F7F7F] right-0 h-full px-3 text-gray-400 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed`}
+                    // inputClassName="w-full rounded-md focus:ring-0 font-normal bg-green-100 dark:bg-green-900 dark:placeholder:text-green-100"
+                    // containerClassName=" border border-[1px] border-gray-400 w-80 rounded-md"
+                    // toggleClassName=" text-gray-400"
+                    inputClassName={`outline-buttonColor w-full rounded-r-lg h-[48px] border-[1px] border-gray-300 rounded-md px-3`}
+                    // containerClassName="  "
+                  />
+                </div>
+
+                <div className="w-1/4">
+                  {
+                    <select
+                      placeholder='Select Company'
+                      value={companyCode}
+                      onChange={handleCompany}
+                      className="select select-bordered w-full focus:outline-none h-[48px]"
+                    >
+                      <option value='' disabled selected>Select Company</option>
+                      {
+                        companyList.map((e, index) =>
+                          <option key={index} value={e.company_code}>{e.company_name}({e.company_code})</option>
+                        )
+                      }
+                    </select>
+                  }
+                </div>
+
+                <div className="w-1/4">
+                  {  isPlantVisible && (
+                    <select
+                      value={plantCode}
+                      onChange={handlePlant}
+                      className="select select-bordered w-full focus:outline-none h-[48px]"
+                    >
+                      <option value="" disabled selected>Select Plant</option>
+                      {
+                        isPlantLoading ?
+                          <p>loading.....</p>
+                          : plant.map((e, index) =>
+                            <option value={e.PLANT_CODE} key={index}>{e.PLANT_NAME}({e.PLANT_CODE})</option>
+                          )
+                      }
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex flex-row space-x-2 items-center w-1/4">
+                  <input onChange={(e)=>{setSearchById(e.target.value)}} value={searchById} type="text" className="w-full px-3 h-[48px] rounded-lg border-[0.2px] border-gray-300 placeholder:text-sm placeholder:text-gray-400 focus:outline-none" placeholder='Search by Employee Id' />
+                  
+                  <button onClick={() => { searchEmpId() }} className="bg-[#013E0E] h-[48px] w-[87px] px-3 flex justify-center items-center text-white rounded-lg">
+                    {/* <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg> */}
+
+                    Search
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-7"></div>
+              {totalReport.map((report, index) => 
+                <div key={index}>
+              
+                  <div className='flex items-center justify-between space-x-4 w-full'>
+                    
+                    <div className='flex items-center justify-between w-1/5 h-24 rounded-l-md shadow-sm pl-2 pr-4 border-l-4 border-buttonColor'>
+                      <div className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6 text-buttonColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                        </svg>
+
+                        <p className="text-[#333439]">Total Attendance</p>
+                      </div>
+
+                      <p className="text-3xl font-semibold text-[#012308]">{report.TOTAL_ATTENDANCE}</p>
+
+                    </div>
+
+                    <div className='flex items-center justify-between w-1/5 h-24 rounded-l-md shadow-sm pl-2 pr-4 border-l-4 border-[#E20000]'>
+                      <div className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6 text-[#E20000]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                        </svg>
+
+
+                        <p className="text-[#333439]">Total Absent</p>
+                      </div>
+
+                      <p className="text-3xl font-semibold text-[#4B0000]">{report.TOTAL_ABSENT}</p>
+
+                    </div>
+
+                    <div className='flex items-center justify-between w-1/5 h-24 rounded-l-md shadow-sm pl-2 pr-4 border-l-4 border-[#FBCC16]'>
+                      <div className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6 text-[#FBCC16]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                        </svg>
+
+
+                        <p className="text-[#333439]">Total Leave</p>
+                      </div>
+
+                      <p className="text-3xl font-semibold text-[#54431A]">{report.TOTAL_LEAVE}</p>
+
+                    </div>
+
+                    <div className='flex items-center justify-between w-1/5 h-24 rounded-l-md shadow-sm pl-2 pr-4 border-l-4 border-[#7a39b2]'>
+                      <div className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6 text-[#7a39b2]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                        </svg>
+
+                        <p className="text-[#333439]">Total Move Order</p>
+                      </div>
+
+                      <p className="text-3xl font-semibold text-[#33194e]">{report.TOTAL_MOVEORDER}</p>
+
+                    </div>
+
+                    <div className='flex items-center justify-between w-1/5 h-24 rounded-l-md shadow-sm pl-2 pr-4 border-l-4 border-[#194BFA]'>
+                      <div className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6 text-[#194BFA]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                        </svg>
+
+
+                        <p className="text-[#333439]">Total Employee</p>
+                      </div>
+
+                      <p className="text-3xl font-semibold text-[#081953]">{report.TOTAL_EMPLOYEE}</p>
+
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="h-10"></div>
+
+              {/* <button onClick={downloadExcel} className="bg-[#013E0E] h-[48px] w-[87px] px-3 flex justify-center items-center text-white rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+
+                <p>Download</p>
+              </button> */}
+
+              <div className="flex items-center justify-end space-x-2">
+                { data.length === 0 ? null : (
+                  <CSVLink data={processedData} headers={headers} filename={`REQUISITION_REPORT_${fileName}.csv`}>
+                    <button className={` w-[180px] h-[48px] flex justify-center items-center bg-[#E6E1DD] px-2 rounded-lg shadow-sm text-[#013E0E] space-x-2 no-underline`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+
+                      <h2 className=" lg:text-sm md:text-xs text-xs">
+                        Download
+                      </h2>
+                    </button>
+                  </CSVLink>
+                )}
+
+                { data.length === 0 ? null : (
+                  <CSVLink data={allProcessedData} headers={headers} filename={`ALL_REQUISITION_REPORT_${fileName}.csv`}>
+                    <button className={` w-[180px] h-[48px] flex justify-center items-center bg-[#E6E1DD] px-2 rounded-lg shadow-sm text-[#013E0E] space-x-2`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" dataSlot="icon" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+
+                      <h2 className=" lg:text-sm md:text-xs text-xs">
+                        Download All
+                      </h2>
+                    </button>
+                  </CSVLink>
+                )}
+              </div>
+
+              <div className="h-5"></div>
+
+              <div className="w-full">
+                {
+                  data.length === 0 ? (
+                    <div className='flex flex-row justify-center items-center text-center w-full h-screen'>
+                      <h1 className={`text-red-500 text-center w-full font-bold text-2xl`}>No Data Found</h1>
+                    </div>
+                  ) : (
+                    <>
+                      <table className="w-full border-[0.5px] border-gray-200 rounded-lg">
+                        <thead className="bg-bgTableHeader text-tableHeaderText shadow-sm h-14 rounded-lg">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              SL
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              EMPLOYEE ID
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              EMPLOYEE NAME
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              POSITION
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              PLANT NAME
+                            </th>
+                              
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              DEPARTMENT
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              CLOCK IN
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              CLOCK OUT
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              LATE TIME
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              LEAVE TYPE
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              MOVE ORDER
+                            </th>
+                              
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              MOVE ORDER CLOCK IN
+                            </th>
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              MOVE ORDER CLOCK OUT
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              ATTENDANCE STATUS
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              TOTAL WORKING TIME
+                            </th>
+                                
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              PICTURE
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              REMARKS
+                            </th>
+
+                            <th className="px-6 py-3 text-left text-sm uppercase tracking-wider">
+                              OVER TIME
+                            </th>
+                          </tr>
+                        </thead>
+                            
+                        <tbody className="w-full divide-y divide-borderColor">
+                          {data.map((e, index) => (
+                            <tr key={index} className="bg-white">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {page + index + 1}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.EMPLOYEE_ID == null ? "N/A" : e.EMPLOYEE_ID}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.EMPLOYEE_NAME == null ? "N/A" : e.EMPLOYEE_NAME}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.POSITION_NAME == null ? "N/A" : e.POSITION_NAME}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.PLANT_NAME == null ? "N/A" : e.PLANT_NAME}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.DEPARTMENT_NAME == null ? "N/A" : e.DEPARTMENT_NAME}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.CLOCK_IN == null ? "N/A" : e.CLOCK_IN}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.CLOCK_OUT == null ? "N/A" : e.CLOCK_OUT}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.REQUISITION_APPROVED_BY == null ? "N/A" : e.REQUISITION_APPROVED_BY}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.MOVE_ORDER_TYPE == null ? "N/A" : e.MOVE_ORDER_TYPE}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.MOVE_ORDER == null ? "N/A" : e.MOVE_ORDER}
+                              </td>
+                              
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.MOVE_ORDER_CLOCK_IN == null ? "N/A" : e.MOVE_ORDER_CLOCK_IN}
+                              </td>
+                                  
+                              {/* <td className="px-6 py-4 whitespace-nowrap">
+                                {e.MOVE_ORDER_CLOCK_OUT == null ? "N/A" : e.MOVE_ORDER_CLOCK_OUT}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.ATTENDANCE_STATUS == null ? "N/A" : e.ATTENDANCE_STATUS}
+                              </td> */}
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.LOGIN_TIME == null ? "N/A" : e.LOGIN_TIME}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.LOGOUT_TIME == null ? "N/A" : e.LOGOUT_TIME}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {calculateWorkingTime(e.CLOCK_OUT, e.CLOCK_IN )}
+                              </td>
+                                  
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.PICTURE == null ? "N/A" : e.PICTURE}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.REMARKS == null ? "N/A" : e.REMARKS}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {e.OVER_TIME == null ? "N/A" : e.OVER_TIME}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )
+                }
+              </div>
+              </>
+          )
+        }
+
+        {/* pagination start here */}
+
+        <div className="h-5"></div>
+
+        {data.length > 0 && (
+          <div className='flex flex-row space-x-4 justify-center items-end mt-4 mb-3 lg:w-full md:w-3/4 sm:w-96 pr-6'>
+            <button disabled={page === 0 && pageSearch === 0 ? true : false} onClick={() => { isSearch ? searchPrevious() : previous() }}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-6 h-6 font-bold ${page === 0 && pageSearch === 0 ? 'text-white' : `text-gray-600`} font-bold`}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+
+            <p className={`text- text-[18px] font-bold`}>
+              Page {isSearch ? pageCountSearch : pageCount} Of {totalPage}
+            </p>
+
+            <button disabled={(isSearch ? pageCountSearch : pageCount) === totalPage || data.length === 0} onClick={() => { isSearch ? searchNext() : next() }}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-6 h-6 font-bold ${((isSearch ? pageCountSearch : pageCount) === totalPage || data.length === 0) ? 'text-white' : 'text-gray-500'} font-bold`}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
